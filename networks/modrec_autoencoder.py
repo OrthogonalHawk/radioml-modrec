@@ -20,6 +20,7 @@ import modrec_cldnn
 # define constants for the command-line argument parser
 DESCRIPTION = "Trains and evaluates a CLDNN Autoencoder model using the Keras framework"
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
+DEFAULT_EVALUATION_METHOD = 'threshold'
 DEFAULT_NUM_TRAINING_EPOCHS = 10
 
 
@@ -60,20 +61,35 @@ def get_dataset_vectors(dataset):
     return np.array(data_x_shuf), np.array(data_y_shuf), num_classes
 
 
-def evaluate_predictions(predict_y, true_y, threshold):
+def evaluate_predictions(args, predict_y, true_y, threshold):
     correct, missed, false_positives = 0, 0, 0
 
-    for idx in range(len(predict_y)):
-        for true_idx in range(len(true_y[idx])):
-            if true_y[idx][true_idx] == 1:
-                if predict_y[idx][true_idx] >= threshold:
-                    correct += 1
-                else:
-                    missed += 1
+    if args.evaluate_method == DEFAULT_EVALUATION_METHOD:
 
+        for idx in range(len(predict_y)):
+            for true_idx in range(len(true_y[idx])):
+                if true_y[idx][true_idx] == 1:
+                    if predict_y[idx][true_idx] >= threshold:
+                        correct += 1
+                    else:
+                        missed += 1
+
+                else:
+                    if predict_y[idx][true_idx] >= threshold:
+                        false_positives += 1
+
+    else:
+
+        for idx in range(len(predict_y)):
+            pred = list(predict_y[idx])
+            true = list(true_y[idx])
+            best_idx = pred.index(max(pred))
+            true_idx = true.index(max(true))
+            if best_idx == true_idx:
+                correct += 1
             else:
-                if predict_y[idx][true_idx] >= threshold:
-                    false_positives += 1
+                missed += 1
+                false_positives += 1
 
     return correct, missed, false_positives
 
@@ -123,7 +139,8 @@ def train_cldnn(args):
     logging.info("Evaluating the CLDNN model...")
     num_validation_examples = int(len(data_x) * 0.25)
     predict_y = cldnn_model.predict(data_x[-num_validation_examples:])
-    correct, missed, false_positives = evaluate_predictions(predict_y,
+    correct, missed, false_positives = evaluate_predictions(args,
+                                                            predict_y,
                                                             data_y[-num_validation_examples:],
                                                             args.confidence_threshold)
 
@@ -142,6 +159,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--evaluate', action='store_true', \
                         help='Evaluate a pre-trained model, skip training')
+
+    parser.add_argument('--evaluate_method', default=DEFAULT_EVALUATION_METHOD, type=str,
+                        help='Evaluation method: <threshold|one-hot>, defaults to %s' % (DEFAULT_EVALUATION_METHOD))
 
     parser.add_argument('--load_model', default=None, type=str, \
                         help='Load a pre-trained model from the provided path')
